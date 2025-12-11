@@ -18,7 +18,7 @@ spec:
       - name: calendar
         image: public.ecr.aws/o9v8l7j1/calender-2026:latest
         ports:
-        - containerPort: 80
+        - containerPort: 3000
 ---
 apiVersion: v1
 kind: Service
@@ -30,6 +30,6 @@ spec:
     app: calendar
   ports:
   - port: 80
-    targetPort: 80
+    targetPort: 3000
     nodePort: 30080
 
