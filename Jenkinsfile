@@ -2,9 +2,9 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = "us-east-1"                 // Public ECR region
-        ALIAS = "o9v8l7j1"                       // Public ECR alias
-        REPO_NAME = "calender-2026"              // Your repo name inside ECR
+        AWS_REGION = "us-east-1"
+        ALIAS = "o9v8l7j1"
+        REPO_NAME = "calender-2026"
         ECR_URI = "public.ecr.aws/${ALIAS}/${REPO_NAME}"
         IMAGE_TAG = "latest"
         FULL_IMAGE = "${ECR_URI}:${IMAGE_TAG}"
@@ -16,6 +16,19 @@ pipeline {
         stage('Checkout Code') {
             steps {
                 git branch: 'main', url: "${GIT_REPO}"
+            }
+        }
+
+        stage('Lint') {
+            steps {
+                sh """
+                    echo "Running YAML lint..."
+                    pip install yamllint >/dev/null 2>&1 || true
+                    yamllint -d relaxed .
+
+                    echo "Linting Dockerfile..."
+                    hadolint Dockerfile || true
+                """
             }
         }
 
@@ -58,28 +71,35 @@ pipeline {
                 }
             }
         }
+
+        stage('Post Actions') {
+            when {
+                expression { currentBuild.currentResult == "SUCCESS" || currentBuild.currentResult == "FAILURE" }
+            }
+            steps {
+                script {
+
+                    if (currentBuild.currentResult == "SUCCESS") {
+                        echo "Deployment Successful!"
+                        echo "Image deployed: ${FULL_IMAGE}"
+                    } else {
+                        echo "Build Failed. Review console output."
+                    }
+
+                    archiveArtifacts artifacts: 'deployment-service.yaml', fingerprint: true
+                }
+            }
+        }
     }
 
     post {
 
-        success {
-            echo "Deployment Successful!"
-            echo "Image deployed: ${FULL_IMAGE}"
-            archiveArtifacts artifacts: 'deployment-service.yaml', fingerprint: true
-        }
-
-        failure {
-            echo "Build Failed! Check Console Output."
-        }
-
         always {
             echo "Performing cleanup..."
-
             sh """
                 docker image prune -f || true
                 docker container prune -f || true
             """
-
             echo "Cleanup completed."
         }
     }
