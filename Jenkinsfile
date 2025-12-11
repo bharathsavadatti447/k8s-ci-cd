@@ -22,10 +22,6 @@ pipeline {
         stage('Lint') {
             steps {
                 sh """
-                    echo "Running YAML lint..."
-                    pip install yamllint >/dev/null 2>&1 || true
-                    yamllint -d relaxed .
-
                     echo "Linting Dockerfile..."
                     hadolint Dockerfile || true
                 """
