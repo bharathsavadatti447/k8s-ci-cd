@@ -2,43 +2,48 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = "us-east-1"   // Public ECR is here
-        ALIAS = "o9v8l7j1"
-        ECR_URI = "public.ecr.aws/o9v8l7j1/calender-2026"
+        AWS_REGION = "us-east-1"                 // Public ECR region
+        ALIAS = "o9v8l7j1"                       // Public ECR alias
+        REPO_NAME = "calender-2026"              // Your repo name inside ECR
+        ECR_URI = "public.ecr.aws/${ALIAS}/${REPO_NAME}"
         IMAGE_TAG = "latest"
         FULL_IMAGE = "${ECR_URI}:${IMAGE_TAG}"
-        REPO = "https://github.com/bharathsavadatti447/k8s-ci-cd.git"
+        GIT_REPO = "https://github.com/bharathsavadatti447/k8s-ci-cd.git"
     }
 
     stages {
 
         stage('Checkout Code') {
             steps {
-                git branch: 'main', url: "${REPO}"
+                git branch: 'main', url: "${GIT_REPO}"
             }
         }
 
         stage('Docker Build') {
             steps {
-                sh "docker build -t ${FULL_IMAGE} ."
+                sh """
+                    echo "Building Docker image: ${FULL_IMAGE}"
+                    docker build -t ${FULL_IMAGE} .
+                """
             }
         }
 
-        stage('Login to AWS ECR') {
+        stage('Login to AWS Public ECR') {
             steps {
-                script {
-                    sh '''
-                        echo "Logging into AWS Public ECR..."
-                        aws ecr-public get-login-password --region ${AWS_REGION} | \
-                        docker login --username AWS --password-stdin public.ecr.aws/${ALIAS}
-                    '''
-                }
+                sh """
+                    echo "Logging into AWS Public ECR..."
+                    aws ecr-public get-login-password --region ${AWS_REGION} \
+                        | docker login --username AWS --password-stdin public.ecr.aws/${ALIAS}
+                """
             }
         }
 
-        stage('Push to Public ECR') {
+        stage('Push Image to Public ECR') {
             steps {
-                sh "docker push ${FULL_IMAGE}"
+                sh """
+                    echo "Pushing image to ECR: ${FULL_IMAGE}"
+                    docker push ${FULL_IMAGE}
+                """
             }
         }
 
@@ -46,7 +51,9 @@ pipeline {
             steps {
                 withKubeConfig(credentialsId: 'k8s-kubeconfig') {
                     sh """
-                    kubectl apply -f deployment-service.yaml
+                        echo "Deploying to Kubernetes..."
+                        kubectl apply -f deployment-service.yaml
+                        kubectl rollout status deployment/calendar-deployment --timeout=60s || true
                     """
                 }
             }
@@ -58,40 +65,22 @@ pipeline {
         success {
             echo "Deployment Successful!"
             echo "Image deployed: ${FULL_IMAGE}"
-
-            // OPTIONAL: Add Email Notification
-            // mail to: 'team@example.com',
-            //      subject: "SUCCESS: Build #${env.BUILD_NUMBER}",
-            //      body: "Deployment completed successfully."
-
-            // OPTIONAL: Slack Notification
-            // slackSend channel: '#deployments', message: "SUCCESS: Build ${env.BUILD_NUMBER}"
-
-            // Archive Deployment File
-            archiveArtifacts artifacts: 'app.yaml', fingerprint: true
+            archiveArtifacts artifacts: 'deployment-service.yaml', fingerprint: true
         }
 
         failure {
-            echo "Build Failed!"
-
-            // OPTIONAL Email
-            // mail to: 'team@example.com',
-            //      subject: "FAILURE: Build #${env.BUILD_NUMBER}",
-            //      body: "Pipeline failed. Please check console output."
-
-            // OPTIONAL Slack
-            // slackSend channel: '#deployments', message: "FAILURE: Build ${env.BUILD_NUMBER}"
+            echo "Build Failed! Check Console Output."
         }
 
         always {
-            echo "Cleaning up Docker Images..."
+            echo "Performing cleanup..."
 
             sh """
-            docker image prune -f || true
-            docker container prune -f || true
+                docker image prune -f || true
+                docker container prune -f || true
             """
 
-            echo "Post build cleanup complete."
+            echo "Cleanup completed."
         }
     }
 }
