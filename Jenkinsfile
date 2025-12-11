@@ -3,6 +3,7 @@ pipeline {
 
     environment {
         AWS_REGION = "us-east-1"   // Public ECR is here
+        ALIAS = "o9v8l7j1"
         ECR_URI = "public.ecr.aws/o9v8l7j1/calender-2026"
         IMAGE_TAG = "latest"
         FULL_IMAGE = "${ECR_URI}:${IMAGE_TAG}"
@@ -28,7 +29,7 @@ pipeline {
                 withAWS(credentials: 'aws-creds', region: "${AWS_REGION}") {
                     sh """
                     aws ecr-public get-login-password --region ${AWS_REGION} \
-                    | docker login --username AWS --password-stdin public.ecr.aws
+                    | docker login --username AWS --password-stdin public.ecr.aws/${ALIAS}
                     """
                 }
             }
